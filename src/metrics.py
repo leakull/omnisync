@@ -12,3 +12,21 @@ sync_duration_seconds = Histogram(
     ["source"],
     buckets=[1, 5, 10, 30, 60, 120, 300],
 )
+
+dlq_events_total = Counter(
+    "omnisync_dlq_events_total",
+    "Total number of events sent to the dead-letter queue",
+    ["source", "operation"],
+)
+
+outbox_published_total = Counter(
+    "omnisync_outbox_published_total",
+    "Total number of outbox events published to downstream consumers",
+    ["status"],
+)
+
+s3_storage_failures_total = Counter(
+    "omnisync_s3_storage_failures_total",
+    "Total number of S3/MinIO storage failures (fell back to DB)",
+    ["operation"],
+)

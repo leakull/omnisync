@@ -1,45 +1,44 @@
-import hashlib
-from uuid import uuid4
-
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+import uuid
+from typing import Any
 
 from src.config import settings
 from src.logging_config import logger
 from src.otel import get_tracer
+from src.search.embeddings import embed_text, get_dimension
 
 tracer = get_tracer("omnisync.search")
 
 COLLECTION_NAME = "omnisync_events"
-VECTOR_SIZE = 384
+
+# Stable namespace so the same event_id always maps to the same Qdrant point id,
+# making (re)indexing idempotent instead of creating duplicate points.
+_POINT_NAMESPACE = uuid.UUID("6f1d3c2a-0000-4000-8000-000000000001")
 
 
-def _get_client() -> QdrantClient | None:
+def _get_client() -> Any | None:
     try:
+        from qdrant_client import QdrantClient
+
         return QdrantClient(url=settings.QDRANT_URL)
     except Exception as e:
         logger.warning("qdrant_connection_failed", error=str(e))
         return None
 
 
-def _ensure_collection(client: QdrantClient) -> None:
+def _ensure_collection(client: Any) -> None:
+    from qdrant_client.models import Distance, VectorParams
+
     collections = [c.name for c in client.get_collections().collections]
     if COLLECTION_NAME not in collections:
         client.create_collection(
             collection_name=COLLECTION_NAME,
-            vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE),
+            vectors_config=VectorParams(size=get_dimension(), distance=Distance.COSINE),
         )
         logger.info("qdrant_collection_created", collection=COLLECTION_NAME)
 
 
-def _text_to_vector(text: str) -> list[float]:
-    h = hashlib.sha256(text.encode()).digest()
-    vec = []
-    for i in range(0, min(len(h), VECTOR_SIZE), 1):
-        vec.append((h[i % len(h)] / 255.0) * 2 - 1)
-    while len(vec) < VECTOR_SIZE:
-        vec.append(0.0)
-    return vec[:VECTOR_SIZE]
+def _point_id(event_id: str) -> str:
+    return str(uuid.uuid5(_POINT_NAMESPACE, event_id))
 
 
 def index_event(event_id: str, content: str, source: str, event_type: str) -> bool:
@@ -47,18 +46,20 @@ def index_event(event_id: str, content: str, source: str, event_type: str) -> bo
     if not client:
         return False
 
+    from qdrant_client.models import PointStruct
+
     with tracer.start_as_current_span("qdrant.index_event") as span:
         span.set_attribute("event_id", event_id)
         span.set_attribute("source", source)
 
         try:
             _ensure_collection(client)
-            vector = _text_to_vector(content)
+            vector = embed_text(content)
             client.upsert(
                 collection_name=COLLECTION_NAME,
                 points=[
                     PointStruct(
-                        id=str(uuid4()),
+                        id=_point_id(event_id),
                         vector=vector,
                         payload={
                             "event_id": event_id,
@@ -91,17 +92,13 @@ def search_events(
 
         try:
             _ensure_collection(client)
-            vector = _text_to_vector(query)
+            vector = embed_text(query)
 
             must_filters = []
             if source:
-                must_filters.append(
-                    {"key": "source", "match": {"value": source}}
-                )
+                must_filters.append({"key": "source", "match": {"value": source}})
             if event_type:
-                must_filters.append(
-                    {"key": "event_type", "match": {"value": event_type}}
-                )
+                must_filters.append({"key": "event_type", "match": {"value": event_type}})
 
             query_filter = {"must": must_filters} if must_filters else None
 

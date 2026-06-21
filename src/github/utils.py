@@ -1,13 +1,18 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from src.events.schemas import NormalizedEventCreate
 from src.github.schemas import GitHubCommitData, GitHubPRData
 
 
+def _as_uuid(raw_payload_id: str | UUID | None) -> UUID | None:
+    return UUID(raw_payload_id) if isinstance(raw_payload_id, str) else raw_payload_id
+
+
 def parse_commit_to_event(
     commit: GitHubCommitData,
     repo_full_name: str,
-    raw_payload_id: str | None = None,
+    raw_payload_id: str | UUID | None = None,
 ) -> NormalizedEventCreate:
     author_name = ""
     author_id = ""
@@ -30,14 +35,14 @@ def parse_commit_to_event(
         content=commit.commit.message,
         event_type="commit",
         timestamp=timestamp,
-        raw_payload_id=raw_payload_id,
+        raw_payload_id=_as_uuid(raw_payload_id),
     )
 
 
 def parse_pr_to_event(
     pr: GitHubPRData,
     repo_full_name: str,
-    raw_payload_id: str | None = None,
+    raw_payload_id: str | UUID | None = None,
 ) -> NormalizedEventCreate:
     author_name = ""
     author_id = ""
@@ -64,5 +69,5 @@ def parse_pr_to_event(
         content=content,
         event_type="pull_request",
         timestamp=timestamp,
-        raw_payload_id=raw_payload_id,
+        raw_payload_id=_as_uuid(raw_payload_id),
     )

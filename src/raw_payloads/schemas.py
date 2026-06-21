@@ -9,5 +9,11 @@ class RawPayloadResponse(BaseModel):
     source: str
     correlation_id: str
     received_at: datetime
+    stored_in_s3: bool = False
 
     model_config = {"from_attributes": True}
+
+
+class RawPayloadDetailResponse(RawPayloadResponse):
+    content_hash: str | None = None
+    payload: dict | None = None

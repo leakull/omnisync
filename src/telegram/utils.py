@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import UUID
 
 from src.events.schemas import NormalizedEventCreate
 from src.telegram.schemas import TelegramMessage
@@ -6,10 +7,12 @@ from src.telegram.schemas import TelegramMessage
 
 def parse_message_to_event(
     message: TelegramMessage,
-    raw_payload_id: str | None = None,
+    raw_payload_id: str | UUID | None = None,
 ) -> NormalizedEventCreate | None:
     if not message.text:
         return None
+
+    rid = UUID(raw_payload_id) if isinstance(raw_payload_id, str) else raw_payload_id
 
     author_id = ""
     author_name = ""
@@ -47,5 +50,5 @@ def parse_message_to_event(
         content=f"{chat_title}{message.text}",
         event_type="message",
         timestamp=timestamp,
-        raw_payload_id=raw_payload_id,
+        raw_payload_id=rid,
     )

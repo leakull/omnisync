@@ -31,7 +31,7 @@ class IMAPClient:
     def fetch_messages(
         self, folder: str = "INBOX", since: datetime | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
-        messages = []
+        messages: list[dict[str, Any]] = []
         with tracer.start_as_current_span("imap.fetch_messages") as span:
             span.set_attribute("imap.folder", folder)
             span.set_attribute("imap.host", self.host)
@@ -61,7 +61,11 @@ class IMAPClient:
                     if status != "OK":
                         continue
 
+                    if not msg_data or not isinstance(msg_data[0], tuple):
+                        continue
                     raw_email = msg_data[0][1]
+                    if not isinstance(raw_email, (bytes, bytearray)):
+                        continue
                     msg = email.message_from_bytes(raw_email)
 
                     subject = self._decode_header(msg.get("Subject", ""))
@@ -72,14 +76,18 @@ class IMAPClient:
                     if msg.is_multipart():
                         for part in msg.walk():
                             if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode(
-                                    part.get_content_charset() or "utf-8", errors="replace"
-                                )
+                                payload = part.get_payload(decode=True)
+                                if isinstance(payload, (bytes, bytearray)):
+                                    body = payload.decode(
+                                        part.get_content_charset() or "utf-8", errors="replace"
+                                    )
                                 break
                     else:
-                        body = msg.get_payload(decode=True).decode(
-                            msg.get_content_charset() or "utf-8", errors="replace"
-                        )
+                        payload = msg.get_payload(decode=True)
+                        if isinstance(payload, (bytes, bytearray)):
+                            body = payload.decode(
+                                msg.get_content_charset() or "utf-8", errors="replace"
+                            )
 
                     date = datetime.now(timezone.utc)
                     if date_str:
@@ -134,12 +142,18 @@ class IMAPConnector(BaseConnector):
         username: str = "",
         password: str = "",
         folder: str = "INBOX",
+        use_ssl: bool = True,
     ):
+        if not host:
+            raise ValueError("IMAP host must be configured (IMAP_HOST)")
+        if not username or not password:
+            raise ValueError("IMAP username and password must be configured")
         self.client = IMAPClient(
-            host=host or None,
+            host=host,
             port=port,
-            username=username or None,
-            password=password or None,
+            username=username,
+            password=password,
+            use_ssl=use_ssl,
         )
         self.folder = folder
 

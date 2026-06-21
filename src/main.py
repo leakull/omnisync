@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Response
 from fastapi.middleware.cors import CORSMiddleware
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
@@ -12,13 +12,16 @@ from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.agent.router import router as agent_router
 from src.auth.router import router as auth_router
 from src.config import settings
 from src.database import engine, get_db
+from src.dlq.router import router as dlq_router
 from src.events.router import router as events_router
 from src.github.router import router as github_router
 from src.imap.router import router as imap_router
 from src.logging_config import logger, setup_logging
+from src.raw_payloads.router import router as raw_payloads_router
 from src.search.router import router as search_router
 from src.telegram.router import router as telegram_router
 
@@ -28,10 +31,12 @@ setup_logging()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("omnisync_starting", version="0.1.0")
-    from src.otel import init_otel, shutdown_otel
+    from src.otel import init_otel, instrument_fastapi, instrument_sqlalchemy, shutdown_otel
 
     try:
-        init_otel()
+        init_otel(service_name="omnisync-api")
+        instrument_fastapi(app)
+        instrument_sqlalchemy(engine)
     except Exception as e:
         logger.warning("otel_init_failed", error=str(e))
     yield
@@ -49,7 +54,7 @@ app = FastAPI(
 
 limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
 allowed_origins = settings.ALLOWED_ORIGINS.split(",")
 app.add_middleware(
@@ -66,11 +71,14 @@ app.include_router(telegram_router, prefix="/api/v1")
 app.include_router(imap_router, prefix="/api/v1")
 app.include_router(search_router, prefix="/api/v1")
 app.include_router(events_router, prefix="/api/v1")
+app.include_router(raw_payloads_router, prefix="/api/v1")
+app.include_router(dlq_router, prefix="/api/v1")
+app.include_router(agent_router, prefix="/api/v1")
 
 instrumentator = Instrumentator(
     should_group_status_codes=False,
     should_ignore_untemplated=True,
-    excluded_handlers=["/health", "/health/ready", "/metrics"],
+    excluded_handlers=["/health", "/health/ready", "/health/live", "/metrics"],
 )
 instrumentator.instrument(app)
 instrumentator.expose(app, endpoint="/metrics")
@@ -132,9 +140,7 @@ async def _check_jaeger() -> tuple[bool, float | None, str | None]:
 
         start = time.monotonic()
         async with httpx.AsyncClient(timeout=2) as client:
-            resp = await client.get(
-                "http://localhost:16686/"
-            )
+            resp = await client.get(settings.JAEGER_HEALTH_URL)
             latency = (time.monotonic() - start) * 1000
             return resp.status_code == 200, latency, None
     except Exception as e:
@@ -178,6 +184,26 @@ async def health(db: AsyncSession = Depends(get_db)):
     )
 
 
-@app.get("/health/ready", response_model=HealthResponse)
-async def readiness(db: AsyncSession = Depends(get_db)):
-    return await health(db)
+@app.get("/health/live")
+async def liveness():
+    """Liveness probe: only confirms the process is up. Must not depend on
+    external services, otherwise a transient dependency outage would cause
+    the orchestrator to kill an otherwise-healthy process."""
+    return {"status": "ok"}
+
+
+@app.get("/health/ready")
+async def readiness(response: Response, db: AsyncSession = Depends(get_db)):
+    """Readiness probe: depends only on the *required* backing services
+    (database, Redis). Optional services (MinIO, Jaeger) do not gate traffic."""
+    db_ok = await _check_db(db)
+    redis_ok, _, redis_err = await _check_redis()
+    ready = db_ok and redis_ok
+    if not ready:
+        response.status_code = 503
+    return {
+        "status": "ready" if ready else "not_ready",
+        "database": db_ok,
+        "redis": redis_ok,
+        "redis_error": redis_err,
+    }

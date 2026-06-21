@@ -1,21 +1,37 @@
 import asyncio
 import time
+from datetime import datetime
 
 from src.celery_app import celery_app
 from src.database import async_session
+from src.dlq.service import record_failure_standalone
 from src.events.service import NormalizedEventService
 from src.imap.service import IMAPConnector
-from src.logging_config import logger, set_correlation_id
+from src.logging_config import get_correlation_id, logger, set_correlation_id
 from src.metrics import events_synced_total, sync_duration_seconds
 from src.raw_payloads.service import save_raw_payload
 from src.sync_logs.service import create_sync_log, update_sync_log_status
+from src.sync_state.service import get_cursor, set_cursor
 
 
 @celery_app.task(
+    bind=True,
     name="src.imap.tasks.sync_imap_messages",
 )
-def sync_imap_messages():
-    asyncio.run(_sync_imap_messages())
+def sync_imap_messages(self):
+    try:
+        asyncio.run(_sync_imap_messages())
+    except Exception as e:
+        asyncio.run(
+            record_failure_standalone(
+                source="imap",
+                operation=self.name,
+                payload={"trigger": "resync"},
+                error_text=str(e),
+                correlation_id=get_correlation_id() or None,
+            )
+        )
+        raise
 
 
 async def _sync_imap_messages():
@@ -35,19 +51,27 @@ async def _sync_imap_messages():
         username=imap_settings.IMAP_USERNAME,
         password=imap_settings.IMAP_PASSWORD,
         folder=imap_settings.IMAP_FOLDER,
+        use_ssl=imap_settings.IMAP_USE_SSL,
     )
 
     async with async_session() as session:
         try:
-            raw_items = await connector.fetch()
+            cursor = await get_cursor(session, "imap")
+            since = datetime.fromisoformat(cursor) if cursor else None
+            raw_items = await connector.fetch(since=since)
             event_data_list = []
+            max_date = None
             for raw in raw_items:
-                raw_payload_id = await save_raw_payload(
-                    session, "imap_poll", raw, correlation_id
-                )
-                event_data = connector.normalize(raw, str(raw_payload_id))
+                raw_date = raw.get("date")
+                if isinstance(raw_date, datetime) and (max_date is None or raw_date > max_date):
+                    max_date = raw_date
+                raw_payload_id = await save_raw_payload(session, "imap_poll", raw, correlation_id)
+                event_data = connector.normalize(raw, raw_payload_id)
                 if event_data:
                     event_data_list.append(event_data)
+
+            if max_date is not None:
+                await set_cursor(session, "imap", max_date.isoformat())
 
             if event_data_list:
                 results = await NormalizedEventService.upsert_events_bulk(

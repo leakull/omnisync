@@ -6,10 +6,11 @@ import httpx
 
 from src.celery_app import celery_app
 from src.database import async_session
+from src.dlq.service import record_failure_standalone
 from src.events.service import NormalizedEventService
 from src.github.service import github_client
 from src.github.utils import parse_commit_to_event, parse_pr_to_event
-from src.logging_config import logger, set_correlation_id
+from src.logging_config import get_correlation_id, logger, set_correlation_id
 from src.metrics import events_synced_total, sync_duration_seconds
 from src.raw_payloads.service import save_raw_payload
 from src.sync_logs.service import create_sync_log, update_sync_log_status
@@ -17,15 +18,36 @@ from src.sync_logs.service import create_sync_log, update_sync_log_status
 RETRYABLE_ERRORS = (httpx.ConnectError, httpx.TimeoutException, ConnectionError)
 
 
+def _to_dlq_if_done(self, operation: str, source: str, error: Exception) -> None:
+    """Record the failure to the dead-letter queue when it is non-retryable
+    or all Celery retries have been exhausted."""
+    exhausted = self.request.retries >= (self.max_retries or 0)
+    if not isinstance(error, RETRYABLE_ERRORS) or exhausted:
+        asyncio.run(
+            record_failure_standalone(
+                source=source,
+                operation=operation,
+                payload={"trigger": "resync"},
+                error_text=str(error),
+                correlation_id=get_correlation_id() or None,
+            )
+        )
+
+
 @celery_app.task(
+    bind=True,
     name="src.github.tasks.sync_github_commits",
     autoretry_for=RETRYABLE_ERRORS,
     retry_backoff=True,
     retry_backoff_max=600,
     retry_kwargs={"max_retries": 3},
 )
-def sync_github_commits():
-    asyncio.run(_sync_github_commits())
+def sync_github_commits(self):
+    try:
+        asyncio.run(_sync_github_commits())
+    except Exception as e:
+        _to_dlq_if_done(self, self.name, "github", e)
+        raise
 
 
 async def _sync_github_commits():
@@ -40,7 +62,9 @@ async def _sync_github_commits():
     log_id = await create_sync_log(async_session, correlation_id, "github_poll_commits")
     async with async_session() as session:
         try:
-            commits = await github_client.get_commits(owner, repo)
+            watermark = await NormalizedEventService.get_watermark(session, "github", "commit")
+            since = watermark.isoformat() if watermark else None
+            commits = await github_client.get_commits(owner, repo, since=since)
 
             if commits:
                 raw_payload_id = await save_raw_payload(
@@ -85,14 +109,19 @@ async def _sync_github_commits():
 
 
 @celery_app.task(
+    bind=True,
     name="src.github.tasks.sync_github_pull_requests",
     autoretry_for=RETRYABLE_ERRORS,
     retry_backoff=True,
     retry_backoff_max=600,
     retry_kwargs={"max_retries": 3},
 )
-def sync_github_pull_requests():
-    asyncio.run(_sync_github_pull_requests())
+def sync_github_pull_requests(self):
+    try:
+        asyncio.run(_sync_github_pull_requests())
+    except Exception as e:
+        _to_dlq_if_done(self, self.name, "github", e)
+        raise
 
 
 async def _sync_github_pull_requests():
@@ -107,7 +136,11 @@ async def _sync_github_pull_requests():
     log_id = await create_sync_log(async_session, correlation_id, "github_poll_prs")
     async with async_session() as session:
         try:
-            prs = await github_client.get_pull_requests(owner, repo)
+            watermark = await NormalizedEventService.get_watermark(
+                session, "github", "pull_request"
+            )
+            since = watermark.isoformat() if watermark else None
+            prs = await github_client.get_pull_requests(owner, repo, since=since)
 
             if prs:
                 raw_payload_id = await save_raw_payload(

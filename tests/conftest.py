@@ -1,19 +1,29 @@
 import asyncio
 import json
+import os
 import uuid
 from typing import AsyncGenerator
 from unittest.mock import patch
 
-import fakeredis.aioredis
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy import types
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+# Use the deterministic, dependency-free embedding backend in tests so importing
+# the app does not require the sentence-transformers model or a Qdrant server.
+os.environ.setdefault("EMBEDDING_BACKEND", "fake")
 
-from src.auth.service import AuthService
-from src.database import Base, get_db
-from src.main import app
+import fakeredis.aioredis  # noqa: E402
+import pytest  # noqa: E402
+import pytest_asyncio  # noqa: E402
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+from sqlalchemy import types  # noqa: E402
+from sqlalchemy.ext.asyncio import (  # noqa: E402
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+
+import src.models  # noqa: F401,E402  (registers all ORM models on Base.metadata)
+from src.auth.service import AuthService  # noqa: E402
+from src.database import Base, get_db  # noqa: E402
+from src.main import app  # noqa: E402
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///./test.db"
 

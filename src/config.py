@@ -1,5 +1,19 @@
+import os
+
 from pydantic import model_validator
 from pydantic_settings import BaseSettings
+
+
+def resolve_secrets_dir() -> str | None:
+    """Directory of file-based secrets (Docker/K8s ``/run/secrets`` style).
+
+    Each field can be supplied as a file named after the env var, letting a
+    secret manager inject credentials without putting them in ``.env`` or the
+    process environment. Returns None when the directory is absent so local
+    development keeps using ``.env``.
+    """
+    candidate = os.getenv("SECRETS_DIR", "/run/secrets")
+    return candidate if os.path.isdir(candidate) else None
 
 
 class Settings(BaseSettings):
@@ -32,12 +46,40 @@ class Settings(BaseSettings):
     S3_PAYLOAD_THRESHOLD: int = 32768
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
+    JAEGER_HEALTH_URL: str = "http://jaeger:16686/"
 
     RAW_PAYLOAD_TTL_DAYS: int = 90
 
     QDRANT_URL: str = "http://localhost:6333"
 
-    model_config = {"env_file": ".env"}
+    # Embeddings: backend = local (sentence-transformers) | openai | fake
+    EMBEDDING_BACKEND: str = "local"
+    EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
+    EMBEDDING_DIM: int = 384
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://api.openai.com/v1"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    # Outbox publisher
+    OUTBOX_BATCH_SIZE: int = 100
+    OUTBOX_MAX_ATTEMPTS: int = 10
+
+    # Dead-letter queue
+    DLQ_MAX_REPLAY_ATTEMPTS: int = 5
+
+    # Outbound email (SMTP)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_USE_TLS: bool = True
+    SMTP_FROM: str = ""
+
+    model_config = {
+        "env_file": ".env",
+        "secrets_dir": resolve_secrets_dir(),
+        "extra": "ignore",
+    }
 
     @model_validator(mode="after")
     def _validate_jwt_secret(self) -> "Settings":

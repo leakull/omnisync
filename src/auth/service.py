@@ -12,7 +12,7 @@ from src.auth.models import User
 from src.auth.schemas import TokenPayload, UserCreate, UserLogin
 from src.logging_config import logger
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
 
 _redis_client: aioredis.Redis | None = None
 

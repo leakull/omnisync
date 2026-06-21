@@ -1,6 +1,8 @@
 # OmniSync
 
-Integration gateway for collecting, normalizing, and serving work events from GitHub and Telegram.
+Integration gateway for collecting, normalizing, deduplicating, and serving work events from
+multiple sources — GitHub, Telegram, email (IMAP), a Jira task tracker, and S3/MinIO file storage —
+with a transactional outbox change feed for downstream Pulse modules and AI agents.
 
 ## Architecture
 
@@ -35,10 +37,12 @@ Integration gateway for collecting, normalizing, and serving work events from Gi
 ## Tech Stack
 
 - **Python 3.12**, FastAPI, SQLAlchemy 2.0 (async), asyncpg
-- PostgreSQL 16, Redis 7, MinIO
-- Celery + Redis (task queue)
+- PostgreSQL 16 (timezone-aware timestamps, `ON CONFLICT` upserts), Redis 7, MinIO
+- Celery + Redis (task queue, beat scheduler)
 - Alembic (migrations)
-- OpenTelemetry + Jaeger (tracing)
+- Qdrant + sentence-transformers (semantic vector search)
+- Transactional outbox + dead-letter queue (DLQ) for reliable delivery & replay
+- OpenTelemetry + Jaeger (tracing in API **and** Celery workers)
 - Prometheus (metrics)
 
 ## Quick Start
@@ -63,11 +67,13 @@ docker compose exec api alembic upgrade head
 
 ## Data Flow
 
-1. **Raw payloads** arrive via webhook or polling (GitHub/Telegram)
-2. Stored in `raw_payloads` table (small) or MinIO (large, >32KB)
-3. **Normalized events** created/updated via upsert with versioning
+1. **Raw payloads** arrive via webhook or polling (GitHub/Telegram/IMAP)
+2. Stored in `raw_payloads` table (small) or MinIO (large, >32KB), deduplicated by content hash
+3. **Normalized events** created/updated via idempotent `ON CONFLICT` upsert with versioning
 4. Previous versions preserved in `event_versions` for audit trail
-5. Sync operations logged in `sync_logs`
+5. Sync operations logged in `sync_logs`; exhausted retries land in `failed_events` (DLQ) for replay
+6. Each change emits an `outbox_events` row, published asynchronously to the vector index
+   (and any future Pulse / AI-agent consumers) — never lost, retried with back-off
 
 ## API Endpoints
 
@@ -84,8 +90,38 @@ docker compose exec api alembic upgrade head
 | POST | `/api/v1/github/webhooks/github` | GitHub webhook receiver |
 | POST | `/api/v1/telegram/sync` | Trigger Telegram sync |
 | POST | `/api/v1/telegram/webhook` | Telegram webhook receiver |
-| GET | `/health` | Health check |
+| POST | `/api/v1/imap/sync` | Trigger IMAP mailbox sync |
+| POST | `/api/v1/imap/send` | Send an email via SMTP |
+| GET | `/api/v1/search/events` | Semantic vector search over events |
+| GET | `/api/v1/raw-payloads/{id}` | Fetch raw payload (DB or S3) — source traceability |
+| GET | `/api/v1/dlq/failed-events` | List dead-lettered sync operations |
+| POST | `/api/v1/dlq/failed-events/{id}/replay` | Replay a failed operation |
+| GET | `/api/v1/agent/changes` | Incremental change feed (poll by cursor) for AI agents |
+| GET | `/api/v1/agent/changes/stream` | SSE stream of the change feed |
+| GET | `/health` | Detailed dependency status (observability) |
+| GET | `/health/live` | Liveness probe (no external deps) |
+| GET | `/health/ready` | Readiness probe (DB + Redis only; 503 if not ready) |
 | GET | `/metrics` | Prometheus metrics |
+
+### Sources / connectors
+
+| Source | Type | Incremental cursor |
+|--------|------|--------------------|
+| `github` | VCS / reviews | event-timestamp watermark |
+| `telegram` | messenger | `getUpdates` offset (persisted in `sync_state`) |
+| `imap` | email inbox | `SINCE` date (persisted in `sync_state`) |
+| `jira` | task tracker | JQL `updated >=` (persisted in `sync_state`) |
+| `filestore` | S3/MinIO bucket | object `LastModified` (persisted in `sync_state`) |
+
+Outbound email is sent via SMTP (`POST /api/v1/imap/send`).
+
+### Production notes
+
+- **Embeddings** (`EMBEDDING_BACKEND`): `local` runs sentence-transformers in-process (good for dev);
+  in production prefer `openai` (or another remote embedding API) so the heavy model does not load
+  into the API process. Indexing itself runs in the outbox worker, not on the request path.
+- **Secrets**: when a `SECRETS_DIR` (default `/run/secrets`) exists, every setting may be supplied as a
+  file named after the env var (Docker/Kubernetes secrets) instead of being placed in `.env`.
 
 ## Adding a New Connector
 

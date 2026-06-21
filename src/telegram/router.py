@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -127,7 +128,7 @@ async def telegram_webhook(
             await update_sync_log_status(db, log_id, "completed")
             if update_id:
                 await db.execute(
-                    WebhookDelivery.__table__.update()
+                    sql_update(WebhookDelivery)
                     .where(
                         WebhookDelivery.source == "telegram",
                         WebhookDelivery.delivery_id == str(update_id),
@@ -149,7 +150,7 @@ async def telegram_webhook(
 
         if update_id:
             await db.execute(
-                WebhookDelivery.__table__.update()
+                sql_update(WebhookDelivery)
                 .where(
                     WebhookDelivery.source == "telegram",
                     WebhookDelivery.delivery_id == str(update_id),
@@ -170,7 +171,7 @@ async def telegram_webhook(
 
         if update_id:
             await db.execute(
-                WebhookDelivery.__table__.update()
+                sql_update(WebhookDelivery)
                 .where(
                     WebhookDelivery.source == "telegram",
                     WebhookDelivery.delivery_id == str(update_id),

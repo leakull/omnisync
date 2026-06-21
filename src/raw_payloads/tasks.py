@@ -20,9 +20,7 @@ def cleanup_old_payloads():
 async def _cleanup_old_payloads():
     cutoff = datetime.now(timezone.utc) - timedelta(days=settings.RAW_PAYLOAD_TTL_DAYS)
     async with async_session() as session:
-        result = await session.execute(
-            delete(RawPayload).where(RawPayload.received_at < cutoff)
-        )
+        result = await session.execute(delete(RawPayload).where(RawPayload.received_at < cutoff))
         await session.commit()
         deleted = result.rowcount
         logger.info(

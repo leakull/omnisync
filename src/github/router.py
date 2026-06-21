@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, Header, Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy import select
+from sqlalchemy import update as sql_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -102,7 +103,7 @@ async def github_webhook(
 
         if delivery_id:
             await db.execute(
-                WebhookDelivery.__table__.update()
+                sql_update(WebhookDelivery)
                 .where(
                     WebhookDelivery.source == "github",
                     WebhookDelivery.delivery_id == delivery_id,
@@ -124,7 +125,7 @@ async def github_webhook(
 
         if delivery_id:
             await db.execute(
-                WebhookDelivery.__table__.update()
+                sql_update(WebhookDelivery)
                 .where(
                     WebhookDelivery.source == "github",
                     WebhookDelivery.delivery_id == delivery_id,

@@ -2,6 +2,7 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from uuid import UUID
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from src.logging_config import logger
@@ -47,9 +48,7 @@ async def update_sync_log_status(
 ) -> None:
     async with _get_session(session_or_factory) as (session, owns_session):
         await session.execute(
-            SyncLog.__table__.update()
-            .where(SyncLog.id == log_id)
-            .values(status=status, error_text=error_text)
+            update(SyncLog).where(SyncLog.id == log_id).values(status=status, error_text=error_text)
         )
         if owns_session:
             await session.commit()
