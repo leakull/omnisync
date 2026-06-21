@@ -27,6 +27,7 @@ async def enqueue_event(session: AsyncSession, event: NormalizedEvent) -> None:
                 "event_type": event.event_type,
                 "content": event.content,
                 "version": event.version,
+                "schema_version": event.schema_version,
             },
         )
     )

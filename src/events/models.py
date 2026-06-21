@@ -39,3 +39,5 @@ class NormalizedEvent(Base):
         nullable=False,
     )
     version: Mapped[int] = mapped_column(default=1, nullable=False)
+    # Version of the normalized-content contract this row conforms to.
+    schema_version: Mapped[int] = mapped_column(default=1, nullable=False, server_default="1")

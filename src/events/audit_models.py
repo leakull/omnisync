@@ -21,6 +21,7 @@ class EventVersion(Base):
     )
     version: Mapped[int] = mapped_column(nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    schema_version: Mapped[int] = mapped_column(nullable=False, default=1, server_default="1")
     raw_payload_id: Mapped[UUID | None] = mapped_column(
         PG_UUID(as_uuid=True), ForeignKey("raw_payloads.id"), nullable=True
     )

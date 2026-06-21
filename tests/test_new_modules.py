@@ -169,22 +169,85 @@ async def test_smtp_sends_with_fake_backend(monkeypatch):
 
     sent = {}
 
-    async def fake_send(message, **kwargs):
-        sent["message"] = message
-        sent["kwargs"] = kwargs
+    class FakeSMTP:
+        def __init__(self, hostname=None, port=None, start_tls=None):
+            sent["hostname"] = hostname
+            sent["port"] = port
+
+        async def connect(self):
+            sent["connected"] = True
+
+        async def login(self, username, password):
+            sent["login"] = (username, password)
+
+        async def noop(self):
+            return None
+
+        async def send_message(self, message):
+            sent["message"] = message
+
+        async def quit(self):
+            sent["quit"] = True
 
     fake_module = types.ModuleType("aiosmtplib")
-    fake_module.send = fake_send
+    fake_module.SMTP = FakeSMTP
+    fake_module.SMTPException = type("SMTPException", (Exception,), {})
     monkeypatch.setitem(sys.modules, "aiosmtplib", fake_module)
 
     monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
     monkeypatch.setattr(settings, "SMTP_FROM", "from@example.com")
+    monkeypatch.setattr(settings, "SMTP_USERNAME", "")
+    # Fresh pool so a cached client from another test can't leak in.
+    monkeypatch.setattr(smtp, "_smtp_connection", smtp.SMTPConnection())
 
     await smtp.send_email(["to@example.com"], "Hello", "Body text")
 
-    assert sent["kwargs"]["hostname"] == "smtp.example.com"
+    assert sent["hostname"] == "smtp.example.com"
+    assert sent["connected"] is True
     assert sent["message"]["To"] == "to@example.com"
     assert sent["message"]["Subject"] == "Hello"
+
+
+@pytest.mark.asyncio
+async def test_smtp_reuses_connection_across_sends(monkeypatch):
+    from src.imap import smtp
+
+    connections = {"count": 0}
+
+    class FakeSMTP:
+        def __init__(self, hostname=None, port=None, start_tls=None):
+            connections["count"] += 1
+
+        async def connect(self):
+            pass
+
+        async def login(self, username, password):
+            pass
+
+        async def noop(self):
+            return None
+
+        async def send_message(self, message):
+            pass
+
+        async def quit(self):
+            pass
+
+    fake_module = types.ModuleType("aiosmtplib")
+    fake_module.SMTP = FakeSMTP
+    fake_module.SMTPException = type("SMTPException", (Exception,), {})
+    monkeypatch.setitem(sys.modules, "aiosmtplib", fake_module)
+
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.example.com")
+    monkeypatch.setattr(settings, "SMTP_FROM", "from@example.com")
+    monkeypatch.setattr(settings, "SMTP_USERNAME", "")
+    monkeypatch.setattr(smtp, "_smtp_connection", smtp.SMTPConnection())
+
+    await smtp.send_email(["a@example.com"], "1", "body")
+    await smtp.send_email(["b@example.com"], "2", "body")
+
+    # Second send reuses the live session (NOOP ok) rather than reconnecting.
+    assert connections["count"] == 1
 
 
 # ---------------------------------------------------------------------------

@@ -1,0 +1,74 @@
+groups:
+  - name: omnisync-integration-layer
+    rules:
+      - alert: OmniSyncApiDown
+        expr: up{job="omnisync-api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OmniSync API is unreachable"
+          description: "Prometheus cannot scrape the API /metrics endpoint for >1m."
+
+      - alert: DeadLetterQueueGrowing
+        # Sustained flow of operations into the DLQ — an upstream integration
+        # is likely failing (auth, outage, schema drift).
+        expr: sum(rate(omnisync_dlq_events_total[5m])) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Dead-letter queue is filling up"
+          description: "{{ $value | humanize }} dead-lettered ops/s over the last 5m (by source/operation)."
+
+      - alert: DeadLetterRetriesExhausted
+        # Entries that ran out of automatic retries need manual attention.
+        expr: increase(omnisync_dlq_replays_total{result="exhausted"}[15m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Dead-letter entries exhausted all retries"
+          description: "{{ $value | humanize }} entries gave up on auto-retry in the last 15m; inspect /api/v1/dlq/failed-events."
+
+      - alert: SyncErrorRateHigh
+        expr: |
+          sum(rate(omnisync_events_synced_total{status="error"}[5m]))
+            /
+          clamp_min(sum(rate(omnisync_events_synced_total[5m])), 1) > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High connector sync error rate"
+          description: "More than 20% of sync runs are erroring over the last 5m."
+
+      - alert: OutboxPublishFailing
+        # Outbox = the change feed feeding Pulse / AI agents. Failures here mean
+        # downstream consumers stop receiving updates.
+        expr: sum(rate(omnisync_outbox_published_total{status="failed"}[5m])) > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Outbox publication is failing"
+          description: "Outbox events are failing to publish to downstream consumers."
+
+      - alert: S3StorageFailures
+        expr: increase(omnisync_s3_storage_failures_total[10m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "S3/MinIO storage failures (falling back to DB)"
+          description: "{{ $value | humanize }} S3 operations failed in 10m; large payloads are landing in Postgres instead."
+
+      - alert: SyncDurationSlow
+        expr: |
+          histogram_quantile(0.95, sum(rate(omnisync_sync_duration_seconds_bucket[10m])) by (le, source)) > 120
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Connector sync p95 latency is high"
+          description: "p95 sync duration for {{ $labels.source }} exceeds 120s over 10m."

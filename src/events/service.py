@@ -96,6 +96,7 @@ class NormalizedEventService:
                                 event_id=existing.id,
                                 version=existing.version,
                                 content=existing.content,
+                                schema_version=existing.schema_version,
                                 raw_payload_id=existing.raw_payload_id,
                                 changed_by=changed_by,
                             )
@@ -115,6 +116,7 @@ class NormalizedEventService:
                     "event_type": e.event_type,
                     "timestamp": e.timestamp,
                     "raw_payload_id": e.raw_payload_id,
+                    "schema_version": e.schema_version,
                     "version": target_version,
                     "created_at": now,
                     "updated_at": now,
@@ -134,6 +136,7 @@ class NormalizedEventService:
                 "event_type": stmt.excluded.event_type,
                 "timestamp": stmt.excluded.timestamp,
                 "raw_payload_id": stmt.excluded.raw_payload_id,
+                "schema_version": stmt.excluded.schema_version,
                 "version": stmt.excluded.version,
                 "updated_at": stmt.excluded.updated_at,
             },
@@ -169,6 +172,7 @@ class NormalizedEventService:
                         event_id=ev.id,
                         version=1,
                         content=ev.content,
+                        schema_version=ev.schema_version,
                         raw_payload_id=ev.raw_payload_id,
                         changed_by=changed_by,
                     )

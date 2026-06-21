@@ -34,7 +34,9 @@ async def replay_failed_event(
     if failed is None:
         raise HTTPException(status_code=404, detail="Failed event not found")
 
-    # The operation field stores the Celery task name; re-dispatch it.
+    # The operation field stores the Celery task name; re-dispatch it. Manual
+    # replay clears the entry (and its backoff watermark); a renewed failure
+    # re-records a fresh active entry for the background retrier.
     result = celery_app.send_task(failed.operation)
     failed.replay_attempts += 1
     await mark_resolved(db, failed)

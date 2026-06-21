@@ -18,6 +18,7 @@ celery_app.autodiscover_tasks(
         "src.outbox",
         "src.filestore",
         "src.jira",
+        "src.dlq",
     ]
 )
 
@@ -62,6 +63,10 @@ celery_app.conf.update(
         "publish-outbox": {
             "task": "src.outbox.tasks.publish_outbox",
             "schedule": 30,
+        },
+        "retry-failed-events": {
+            "task": "src.dlq.tasks.retry_failed_events",
+            "schedule": settings.DLQ_RETRY_INTERVAL,
         },
         "sync-filestore": {
             "task": "src.filestore.tasks.sync_filestore",

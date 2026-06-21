@@ -13,6 +13,8 @@ class FailedEventResponse(BaseModel):
     status: str
     replay_attempts: int
     created_at: datetime
+    last_attempt_at: datetime | None = None
+    next_retry_at: datetime | None = None
     resolved_at: datetime | None
 
     model_config = {"from_attributes": True}

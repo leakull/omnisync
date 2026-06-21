@@ -41,9 +41,9 @@ with a transactional outbox change feed for downstream Pulse modules and AI agen
 - Celery + Redis (task queue, beat scheduler)
 - Alembic (migrations)
 - Qdrant + sentence-transformers (semantic vector search)
-- Transactional outbox + dead-letter queue (DLQ) for reliable delivery & replay
+- Transactional outbox + dead-letter queue (DLQ) with **automatic exponential-backoff retry** & manual replay
 - OpenTelemetry + Jaeger (tracing in API **and** Celery workers)
-- Prometheus (metrics)
+- Prometheus metrics + ready-to-use **alert rules** and a **Grafana dashboard**
 
 ## Quick Start
 
@@ -71,9 +71,13 @@ docker compose exec api alembic upgrade head
 2. Stored in `raw_payloads` table (small) or MinIO (large, >32KB), deduplicated by content hash
 3. **Normalized events** created/updated via idempotent `ON CONFLICT` upsert with versioning
 4. Previous versions preserved in `event_versions` for audit trail
-5. Sync operations logged in `sync_logs`; exhausted retries land in `failed_events` (DLQ) for replay
+5. Sync operations logged in `sync_logs`; failed operations land in `failed_events` (DLQ).
+   A beat-scheduled retrier (`src.dlq.tasks.retry_failed_events`) automatically re-dispatches them
+   with **exponential backoff** until they succeed or exhaust their attempt budget (then they are
+   retired to `exhausted` for manual inspection / replay via the DLQ API)
 6. Each change emits an `outbox_events` row, published asynchronously to the vector index
-   (and any future Pulse / AI-agent consumers) — never lost, retried with back-off
+   (and any future Pulse / AI-agent consumers) — never lost, retried with back-off.
+   Every change carries a `schema_version` so consumers can evolve the content contract safely
 
 ## API Endpoints
 
@@ -122,6 +126,55 @@ Outbound email is sent via SMTP (`POST /api/v1/imap/send`).
   into the API process. Indexing itself runs in the outbox worker, not on the request path.
 - **Secrets**: when a `SECRETS_DIR` (default `/run/secrets`) exists, every setting may be supplied as a
   file named after the env var (Docker/Kubernetes secrets) instead of being placed in `.env`.
+
+## Resilience & external-API handling
+
+External systems are slow, rate-limited, and occasionally wrong. The integration layer assumes this:
+
+- **Idempotency** — raw payloads are deduplicated by canonical content hash; normalized events
+  upsert on `(source, external_id)`; inbound webhooks are deduplicated by delivery id
+  (`X-GitHub-Delivery`, Telegram `update_id`) in `webhook_deliveries`.
+- **Webhook authenticity** — GitHub `X-Hub-Signature-256` HMAC and the Telegram secret-token header
+  are verified before any processing.
+- **Rate limits** — the GitHub client throttles client-side, honors `X-RateLimit-Remaining/Reset`,
+  and retries transient failures with `tenacity` exponential backoff.
+- **Retries & dead-lettering** — exhausted operations are dead-lettered, then retried automatically
+  with exponential backoff (`DLQ_RETRY_*` settings) and a capped attempt budget.
+- **Graceful degradation** — if S3/MinIO is unavailable, large payloads transparently fall back to
+  Postgres (and the failure is counted in `omnisync_s3_storage_failures_total`).
+- **Stable identities** — emails are keyed by RFC 5322 `Message-ID`, falling back to
+  `host + folder + UIDVALIDITY + UID` so UIDs never collide across mailboxes or UID resets.
+- **Connection reuse** — IMAP and SMTP sessions are cached and health-checked (NOOP) so short-interval
+  polling and notification bursts don't pay a TLS+AUTH handshake every time.
+
+## Why Celery (and not Dramatiq / RQ)?
+
+The vacancy lists *Celery / Dramatiq / RQ or analogues* — any is defensible. Celery was chosen because:
+
+- **Beat scheduler** is built in — the project needs periodic polling for every connector plus the
+  outbox publisher and the DLQ retrier, all expressed declaratively in `beat_schedule`.
+- **Mature operational tooling** — acks-late, visibility timeouts, autoscaling, Flower, and
+  first-class OpenTelemetry instrumentation (`opentelemetry-instrumentation-celery`) for worker traces.
+- **Redis broker** is already in the stack, so no extra infrastructure.
+
+RQ has no native scheduler (needs `rq-scheduler`) and a thinner feature set; Dramatiq is excellent and
+lighter, but its scheduling/ecosystem story is less batteries-included for this mix of periodic +
+fan-out workloads. The task layer is thin and isolated (`src/*/tasks.py`), so swapping is low-cost.
+
+## Observability & alerting
+
+```bash
+# Start the optional Prometheus + Grafana stack
+docker compose --profile monitoring up -d
+# Prometheus:  http://localhost:9090   (alert rules in monitoring/alerts.yml)
+# Grafana:     http://localhost:3001   (admin/admin; dashboard auto-provisioned)
+```
+
+Alert rules (`monitoring/alerts.yml`) cover API availability, DLQ inflow & exhausted retries,
+sync error rate, outbox publish failures, S3 fallbacks, and sync p95 latency. The Grafana dashboard
+(`monitoring/grafana-dashboard.json` for manual import, or auto-provisioned via the compose profile)
+visualizes the same signals. See [docs/data-lineage.md](docs/data-lineage.md) for how a single record
+flows from source to AI-agent consumer, including every status and error transition.
 
 ## Adding a New Connector
 

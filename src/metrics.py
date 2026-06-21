@@ -30,3 +30,9 @@ s3_storage_failures_total = Counter(
     "Total number of S3/MinIO storage failures (fell back to DB)",
     ["operation"],
 )
+
+dlq_replays_total = Counter(
+    "omnisync_dlq_replays_total",
+    "Total number of dead-letter entries re-dispatched by the background retrier",
+    ["source", "result"],
+)

@@ -66,6 +66,12 @@ class Settings(BaseSettings):
 
     # Dead-letter queue
     DLQ_MAX_REPLAY_ATTEMPTS: int = 5
+    # Background auto-retry of dead-lettered operations (exponential backoff)
+    DLQ_RETRY_ENABLED: bool = True
+    DLQ_RETRY_INTERVAL: int = 60  # how often the beat task scans for due retries (s)
+    DLQ_RETRY_BASE_DELAY: int = 60  # first retry delay (s); doubles each attempt
+    DLQ_RETRY_MAX_DELAY: int = 3600  # cap on the computed backoff (s)
+    DLQ_RETRY_BATCH_SIZE: int = 50
 
     # Outbound email (SMTP)
     SMTP_HOST: str = ""
