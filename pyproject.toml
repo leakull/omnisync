@@ -1,0 +1,35 @@
+[project]
+name = "omnisync"
+version = "0.1.0"
+description = "Integration gateway for collecting, normalizing, and serving work events from GitHub and Telegram"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "omnisync"}
+]
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+
+[project.urls]
+Homepage = "https://github.com/omnisync/omnisync"
+Repository = "https://github.com/omnisync/omnisync"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

@@ -1,0 +1,22 @@
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.auth.dependencies import get_current_user
+from src.auth.models import User
+from src.database import get_db
+from src.search.vector import search_events
+
+router = APIRouter(prefix="/search", tags=["search"])
+
+
+@router.get("/events")
+async def search(
+    q: str = Query(..., min_length=1, description="Search query"),
+    source: str | None = Query(None, description="Filter by source"),
+    event_type: str | None = Query(None, description="Filter by event type"),
+    limit: int = Query(10, ge=1, le=50),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    results = search_events(query=q, source=source, event_type=event_type, limit=limit)
+    return {"query": q, "results": results, "count": len(results)}

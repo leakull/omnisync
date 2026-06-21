@@ -1,0 +1,41 @@
+from celery import Celery
+
+from src.config import settings
+
+celery_app = Celery(
+    "omnisync",
+    broker=settings.CELERY_BROKER_URL,
+    backend=settings.REDIS_URL,
+)
+
+celery_app.autodiscover_tasks(["src.github", "src.telegram", "src.raw_payloads", "src.imap"])
+
+celery_app.conf.update(
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
+    enable_utc=True,
+    beat_schedule={
+        "sync-github-commits": {
+            "task": "src.github.tasks.sync_github_commits",
+            "schedule": settings.GITHUB_SYNC_INTERVAL,
+        },
+        "sync-github-pull-requests": {
+            "task": "src.github.tasks.sync_github_pull_requests",
+            "schedule": settings.GITHUB_SYNC_INTERVAL,
+        },
+        "sync-telegram-messages": {
+            "task": "src.telegram.tasks.sync_telegram_messages",
+            "schedule": settings.TELEGRAM_SYNC_INTERVAL,
+        },
+        "cleanup-old-payloads": {
+            "task": "src.raw_payloads.tasks.cleanup_old_payloads",
+            "schedule": 86400,
+        },
+        "sync-imap-messages": {
+            "task": "src.imap.tasks.sync_imap_messages",
+            "schedule": settings.GITHUB_SYNC_INTERVAL,
+        },
+    },
+)

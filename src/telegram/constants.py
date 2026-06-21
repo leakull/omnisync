@@ -1,0 +1,6 @@
+TELEGRAM_GET_UPDATES = "/bot{token}/getUpdates"
+REQUEST_TIMEOUT: int = 30
+RETRY_ATTEMPTS: int = 3
+RETRY_MIN_WAIT: int = 2
+RETRY_MAX_WAIT: int = 30
+LONG_POLL_TIMEOUT: int = 30
