@@ -26,8 +26,15 @@ db_url = os.getenv("SYNC_DATABASE_URL")
 if db_url:
     config.set_main_option("sqlalchemy.url", db_url)
 
+# Only configure logging from the ini when it actually defines logging
+# sections; our alembic.ini is intentionally minimal (no [formatters]).
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    import configparser
+
+    _parser = configparser.ConfigParser()
+    _parser.read(config.config_file_name)
+    if _parser.has_section("formatters"):
+        fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata
 

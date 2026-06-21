@@ -1,4 +1,6 @@
-fastapi[standard]>=0.115.0
+# Cap below 0.137: that release introduced internal `_IncludedRouter` route
+# objects that prometheus-fastapi-instrumentator (route.path) cannot handle.
+fastapi[standard]>=0.115.0,<0.137.0
 uvicorn[standard]>=0.30.0
 sqlalchemy[asyncio]>=2.0.0
 asyncpg>=0.30.0
