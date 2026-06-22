@@ -117,10 +117,12 @@ async def test_upsert_on_change_increments_version(db_session, auth_headers: dic
     assert updated_event.version == 2
     assert updated_event.content == "Updated content"
 
+    # event_versions is a complete history: the original v1 and the new v2.
     history = await NormalizedEventService.get_event_history(db_session, event.id)
-    assert len(history) == 1
-    assert history[0].version == 1
-    assert history[0].content == "Original content"
+    assert [(h.version, h.content) for h in history] == [
+        (1, "Original content"),
+        (2, "Updated content"),
+    ]
 
     latest = await NormalizedEventService.get_event(db_session, event.id)
     assert latest.version == 2

@@ -74,7 +74,6 @@ class NormalizedEventService:
         existing_map = {(e.source, e.external_id): e for e in existing_result.scalars().all()}
 
         rows: list[dict] = []
-        new_keys: list[tuple[str, str]] = []
         for e in deduped:
             key = (e.source, e.external_id)
             existing = existing_map.get(key)
@@ -83,7 +82,8 @@ class NormalizedEventService:
                 content_changed = existing.content != e.content
                 target_version = existing.version + 1 if content_changed else existing.version
                 if content_changed:
-                    # Snapshot the previous version before it is overwritten.
+                    # Snapshot the previous version before it is overwritten
+                    # (safety net for events that predate versioning).
                     dup = await session.execute(
                         select(EventVersion.id).where(
                             EventVersion.event_id == existing.id,
@@ -103,7 +103,6 @@ class NormalizedEventService:
                         )
             else:
                 target_version = 1
-                new_keys.append(key)
 
             rows.append(
                 {
@@ -155,22 +154,25 @@ class NormalizedEventService:
         )
         final_map = {(e.source, e.external_id): e for e in final_result.scalars().all()}
 
-        # Initial version row for brand-new events.
-        for key in new_keys:
-            ev = final_map.get(key)
+        # Snapshot the current version of every upserted event so event_versions
+        # is a complete history: the brand-new v1, and the new version produced by
+        # each content change. Unchanged re-upserts find the row already present
+        # and add nothing.
+        for e in deduped:
+            ev = final_map.get((e.source, e.external_id))
             if ev is None:
                 continue
             dup = await session.execute(
                 select(EventVersion.id).where(
                     EventVersion.event_id == ev.id,
-                    EventVersion.version == 1,
+                    EventVersion.version == ev.version,
                 )
             )
             if dup.scalar_one_or_none() is None:
                 session.add(
                     EventVersion(
                         event_id=ev.id,
-                        version=1,
+                        version=ev.version,
                         content=ev.content,
                         schema_version=ev.schema_version,
                         raw_payload_id=ev.raw_payload_id,
