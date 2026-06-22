@@ -32,6 +32,19 @@ TestSessionLocal = async_sessionmaker(test_engine, class_=AsyncSession, expire_o
 
 fake_redis = fakeredis.aioredis.FakeRedis()
 
+# Snapshot the pristine (native PostgreSQL) column types right after the models
+# are imported, before any test swaps them for SQLite-compatible shims. This is
+# the source of truth used to fully restore the shared Base.metadata, so the
+# real-Postgres integration suite always sees native UUID/JSONB types.
+_PRISTINE_COLUMN_TYPES = {
+    column: column.type for table in Base.metadata.tables.values() for column in table.columns
+}
+
+
+def _restore_pristine_column_types() -> None:
+    for column, original in _PRISTINE_COLUMN_TYPES.items():
+        column.type = original
+
 
 class UUIDTypeDecorator(types.TypeDecorator):
     impl = types.String
@@ -99,27 +112,25 @@ def event_loop():
 @pytest_asyncio.fixture(autouse=True)
 async def setup_db(request):
     # Postgres integration tests run against a real database with native UUID/
-    # JSONB columns — they must NOT get the SQLite-compatible type swap, and the
-    # shared Base.metadata must be left with its real PG types for their ORM
-    # binds to match. Skip the swap (and the SQLite schema) for them entirely.
+    # JSONB columns — they must NOT get the SQLite-compatible type swap. Force the
+    # shared Base.metadata back to its pristine PG types so their ORM binds match,
+    # regardless of any swap a previous SQLite test may have left behind.
     if request.node.get_closest_marker("postgres"):
+        _restore_pristine_column_types()
         yield
         return
 
     from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
-    # Swap PG-specific column types for SQLite-friendly decorators, remembering
-    # the originals so the global metadata can be restored afterwards (otherwise
-    # the mutation leaks into later tests — e.g. the Postgres integration suite).
-    swapped: list[tuple[object, object]] = []
+    # Swap PG-specific column types for SQLite-friendly decorators so the schema
+    # can be created on SQLite; restored from the pristine snapshot afterwards so
+    # the mutation never leaks into later tests (e.g. the Postgres suite).
     for table in Base.metadata.tables.values():
         for column in table.columns:
             if isinstance(column.type, PG_UUID):
-                swapped.append((column, column.type))
                 column.type = UUIDTypeDecorator()
             elif isinstance(column.type, JSONB):
-                swapped.append((column, column.type))
                 column.type = JSONTypeDecorator()
 
     try:
@@ -129,8 +140,7 @@ async def setup_db(request):
     finally:
         async with test_engine.begin() as conn:
             await conn.run_sync(Base.metadata.drop_all)
-        for column, original in swapped:
-            column.type = original  # type: ignore[attr-defined]
+        _restore_pristine_column_types()
 
 
 @pytest_asyncio.fixture
