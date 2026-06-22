@@ -1,10 +1,14 @@
 import asyncio
 import contextlib
 from email.message import EmailMessage
+from typing import TYPE_CHECKING
 
 from src.config import settings
 from src.logging_config import logger
 from src.otel import get_tracer
+
+if TYPE_CHECKING:
+    import aiosmtplib
 
 tracer = get_tracer("omnisync.smtp")
 
@@ -24,7 +28,7 @@ class SMTPConnection:
     """
 
     def __init__(self) -> None:
-        self._client = None
+        self._client: aiosmtplib.SMTP | None = None
         self._lock = asyncio.Lock()
 
     async def _ensure_client(self):
