@@ -204,18 +204,30 @@ class MyAppConnector(BaseConnector):
 ## Development
 
 ```bash
-# Install dependencies
-pip install -r requirements/dev.txt
+make install      # install dev dependencies
+make hooks        # install pre-commit git hooks
+make check        # lint + typecheck + tests (CI parity)
 
-# Run tests
-python -m pytest tests/ -v
-
-# Lint
-ruff check .
-
-# Type check
-mypy src --ignore-missing-imports
+# or individually:
+make lint         # ruff check
+make format       # ruff format
+make typecheck    # mypy src
+make cov          # tests with coverage report
+make security     # bandit + pip-audit
 ```
+
+Quality gates enforced in CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)):
+
+- **Lint & format** — ruff (`E,F,I,N,W,B,UP,ASYNC,SIM,C4,RUF` rule sets) + `ruff format --check`.
+- **Types** — mypy with `check_untyped_defs`, `warn_return_any` and friends enabled.
+- **Tests & coverage** — pytest against real PostgreSQL + Redis services, branch coverage
+  reported (`--cov`) with a `--cov-fail-under=50` floor; `coverage.xml` is uploaded as an artifact.
+- **Security** — `bandit` static analysis (medium+ severity) and `pip-audit` dependency CVE scan.
+- **Migrations** — `alembic upgrade head → downgrade base → upgrade head` round-trip.
+- **Build** — Docker image build.
+
+The same checks run locally on every commit via [.pre-commit-config.yaml](.pre-commit-config.yaml)
+(`make hooks`).
 
 ## License
 

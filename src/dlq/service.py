@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import or_, select
@@ -57,7 +57,7 @@ async def record_failure(
     ever-growing pile of duplicates — the attempt counter and backoff
     watermark carry across failures instead.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     existing = (
         (
@@ -124,7 +124,7 @@ async def fetch_due_retries(
     Locked ``FOR UPDATE SKIP LOCKED`` so multiple workers can drain the queue
     concurrently without re-dispatching the same entry.
     """
-    now = now or datetime.now(timezone.utc)
+    now = now or datetime.now(UTC)
     limit = limit or settings.DLQ_RETRY_BATCH_SIZE
     result = await session.execute(
         select(FailedEvent)
@@ -144,7 +144,7 @@ async def mark_retry_scheduled(session: AsyncSession, failed: FailedEvent) -> No
     """Account for an automatic replay: bump the attempt counter and push the
     next-retry watermark out by the new backoff (or retire the entry once the
     attempt budget is spent)."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     failed.replay_attempts += 1
     failed.last_attempt_at = now
     if failed.replay_attempts >= settings.DLQ_MAX_REPLAY_ATTEMPTS:
@@ -180,7 +180,7 @@ async def get_failed(session: AsyncSession, failed_event_id: UUID) -> FailedEven
 async def mark_resolved(session: AsyncSession, failed: FailedEvent) -> None:
     failed.status = "resolved"
     failed.next_retry_at = None
-    failed.resolved_at = datetime.now(timezone.utc)
+    failed.resolved_at = datetime.now(UTC)
 
 
 async def mark_replay_failed(session: AsyncSession, failed: FailedEvent, error: str) -> None:

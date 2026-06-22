@@ -34,7 +34,7 @@ async def send_mail(
             from_addr=str(payload.from_addr) if payload.from_addr else None,
         )
     except SMTPNotConfiguredError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+        raise HTTPException(status_code=503, detail=str(e)) from e
     return {"status": "sent", "recipients": len(payload.to)}
 
 

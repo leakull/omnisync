@@ -1,7 +1,8 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
+from typing import cast
 
-from sqlalchemy import delete
+from sqlalchemy import CursorResult, delete
 
 from src.celery_app import celery_app
 from src.config import settings
@@ -18,9 +19,12 @@ def cleanup_old_payloads():
 
 
 async def _cleanup_old_payloads():
-    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.RAW_PAYLOAD_TTL_DAYS)
+    cutoff = datetime.now(UTC) - timedelta(days=settings.RAW_PAYLOAD_TTL_DAYS)
     async with async_session() as session:
-        result = await session.execute(delete(RawPayload).where(RawPayload.received_at < cutoff))
+        result = cast(
+            CursorResult,
+            await session.execute(delete(RawPayload).where(RawPayload.received_at < cutoff)),
+        )
         await session.commit()
         deleted = result.rowcount
         logger.info(

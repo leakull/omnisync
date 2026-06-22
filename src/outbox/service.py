@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
 
 from sqlalchemy import and_, or_, select
@@ -70,7 +70,7 @@ async def fetch_changes(
 
 async def mark_published(session: AsyncSession, outbox: OutboxEvent) -> None:
     outbox.status = "published"
-    outbox.published_at = datetime.now(timezone.utc)
+    outbox.published_at = datetime.now(UTC)
     outbox.attempts += 1
 
 

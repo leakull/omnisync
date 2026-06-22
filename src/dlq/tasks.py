@@ -26,9 +26,8 @@ def retry_failed_events():
 
 async def _retry_failed_events() -> int:
     set_correlation_id()
-    async with async_session() as session:
-        async with session.begin():
-            return await process_due_retries(session)
+    async with async_session() as session, session.begin():
+        return await process_due_retries(session)
 
 
 async def process_due_retries(session: AsyncSession) -> int:

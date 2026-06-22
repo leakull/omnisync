@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -108,7 +108,7 @@ class FileStoreConnector(BaseConnector):
         key = raw.get("key")
         if not key:
             return None
-        last_modified = raw.get("last_modified") or datetime.now(timezone.utc)
+        last_modified = raw.get("last_modified") or datetime.now(UTC)
         size = raw.get("size", 0)
         return NormalizedEventCreate(
             external_id=f"filestore-{self.client.bucket}-{key}",

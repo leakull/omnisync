@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import httpx
@@ -80,7 +80,7 @@ class TelegramClient:
         response = await self._get_client().get(self._get_url("getMe"))
         if response.status_code != 200:
             raise TelegramAPIError(f"HTTP {response.status_code}")
-        return response.json()
+        return cast(dict[str, Any], response.json())
 
 
 telegram_client = TelegramClient()

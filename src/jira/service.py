@@ -1,5 +1,6 @@
-from datetime import datetime, timezone
-from typing import Any
+import contextlib
+from datetime import UTC, datetime
+from typing import Any, cast
 from uuid import UUID
 
 import httpx
@@ -47,7 +48,7 @@ class JiraClient:
                 raise JiraAPIError("Jira rate limit (HTTP 429)")
             if response.status_code >= 400:
                 raise JiraAPIError(f"HTTP {response.status_code}: {response.text[:200]}")
-            return response.json()
+            return cast(dict[str, Any], response.json())
 
     async def search_issues(
         self, project: str = "", since: datetime | None = None
@@ -139,13 +140,11 @@ class JiraConnector(BaseConnector):
         author_id = reporter.get("accountId", "") or reporter.get("emailAddress", "")
         author_name = reporter.get("displayName", "") or author_id
 
-        timestamp = datetime.now(timezone.utc)
+        timestamp = datetime.now(UTC)
         updated = fields.get("updated")
         if updated:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 timestamp = datetime.fromisoformat(updated.replace("Z", "+00:00"))
-            except (ValueError, TypeError):
-                pass
 
         content = f"[{status}] {key}: {summary}"
         if description:

@@ -3,6 +3,7 @@ S3 fallback and stable external IDs — the 'unhappy paths' that resilient
 external integrations must handle (limits, errors, incomplete/unstable data)."""
 
 import time
+from datetime import UTC
 
 import pytest
 
@@ -235,7 +236,7 @@ def test_imap_external_id_prefers_message_id():
 
 @pytest.mark.asyncio
 async def test_schema_version_propagates_to_event_and_outbox(db_session):
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from src.events.schemas import CONTENT_SCHEMA_VERSION, NormalizedEventCreate
     from src.events.service import NormalizedEventService
@@ -248,7 +249,7 @@ async def test_schema_version_propagates_to_event_and_outbox(db_session):
         author_name="A",
         content="c",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     saved = await NormalizedEventService.upsert_event(db_session, ev)
     await db_session.commit()

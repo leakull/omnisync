@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import contextlib
+from datetime import UTC, datetime
 from uuid import UUID
 
 from src.events.schemas import NormalizedEventCreate
@@ -16,16 +17,14 @@ def parse_commit_to_event(
 ) -> NormalizedEventCreate:
     author_name = ""
     author_id = ""
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
 
     if commit.commit.author:
         author_name = commit.commit.author.name or ""
         author_id = commit.commit.author.email or ""
         if commit.commit.author.date:
-            try:
+            with contextlib.suppress(ValueError, TypeError):
                 timestamp = datetime.fromisoformat(commit.commit.author.date.replace("Z", "+00:00"))
-            except (ValueError, TypeError):
-                pass
 
     return NormalizedEventCreate(
         external_id=commit.sha,
@@ -50,12 +49,10 @@ def parse_pr_to_event(
         author_name = pr.user.login
         author_id = pr.user.login
 
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     if pr.created_at:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             timestamp = datetime.fromisoformat(pr.created_at.replace("Z", "+00:00"))
-        except (ValueError, TypeError):
-            pass
 
     content = f"PR #{pr.number}: {pr.title}"
     if pr.body:

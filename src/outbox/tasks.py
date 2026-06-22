@@ -34,18 +34,17 @@ def _publish_one(outbox: OutboxEvent) -> None:
 async def _publish_outbox() -> int:
     set_correlation_id()
     published = 0
-    async with async_session() as session:
-        async with session.begin():
-            pending = await fetch_pending(session)
-            for outbox in pending:
-                try:
-                    _publish_one(outbox)
-                    await mark_published(session, outbox)
-                    outbox_published_total.labels(status="published").inc()
-                    published += 1
-                except Exception as e:
-                    await mark_failed(session, outbox, str(e))
-                    outbox_published_total.labels(status="failed").inc()
-                    logger.warning("outbox_publish_failed", outbox_id=str(outbox.id), error=str(e))
+    async with async_session() as session, session.begin():
+        pending = await fetch_pending(session)
+        for outbox in pending:
+            try:
+                _publish_one(outbox)
+                await mark_published(session, outbox)
+                outbox_published_total.labels(status="published").inc()
+                published += 1
+            except Exception as e:
+                await mark_failed(session, outbox, str(e))
+                outbox_published_total.labels(status="failed").inc()
+                logger.warning("outbox_publish_failed", outbox_id=str(outbox.id), error=str(e))
     logger.info("outbox_publish_run_completed", published=published)
     return published

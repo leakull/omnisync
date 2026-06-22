@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from httpx import AsyncClient
@@ -75,7 +75,7 @@ async def test_upsert_creates_v1(db_session, auth_headers: dict):
         author_name="User One",
         content="Initial commit",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     event = await NormalizedEventService.upsert_event(db_session, event_data)
     await db_session.commit()
@@ -97,7 +97,7 @@ async def test_upsert_on_change_increments_version(db_session, auth_headers: dic
         author_name="User One",
         content="Original content",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     event = await NormalizedEventService.upsert_event(db_session, event_data)
     await db_session.commit()
@@ -109,7 +109,7 @@ async def test_upsert_on_change_increments_version(db_session, auth_headers: dic
         author_name="User One",
         content="Updated content",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     updated_event = await NormalizedEventService.upsert_event(db_session, updated_data)
     await db_session.commit()
@@ -138,7 +138,7 @@ async def test_upsert_no_change_no_new_version(db_session, auth_headers: dict):
         author_name="User One",
         content="Same content",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     event = await NormalizedEventService.upsert_event(db_session, event_data)
     await db_session.commit()
@@ -150,7 +150,7 @@ async def test_upsert_no_change_no_new_version(db_session, auth_headers: dict):
         author_name="User One",
         content="Same content",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     same_event = await NormalizedEventService.upsert_event(db_session, same_data)
     await db_session.commit()
@@ -171,7 +171,7 @@ async def test_event_history_endpoint(client: AsyncClient, auth_headers: dict, d
         author_name="User One",
         content="First version",
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
     event = await NormalizedEventService.upsert_event(db_session, event_data)
     await db_session.commit()
@@ -197,7 +197,7 @@ async def test_upsert_bulk_dedup(db_session, auth_headers: dict):
             author_name="User One",
             content="Bulk event 1",
             event_type="commit",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         ),
         NormalizedEventCreate(
             external_id="bulk-002",
@@ -206,7 +206,7 @@ async def test_upsert_bulk_dedup(db_session, auth_headers: dict):
             author_name="User One",
             content="Bulk event 2",
             event_type="commit",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         ),
         NormalizedEventCreate(
             external_id="bulk-001",
@@ -215,7 +215,7 @@ async def test_upsert_bulk_dedup(db_session, auth_headers: dict):
             author_name="User One",
             content="Bulk event 1 duplicate",
             event_type="commit",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         ),
     ]
     results = await NormalizedEventService.upsert_events_bulk(db_session, events)
@@ -245,7 +245,7 @@ async def test_cursor_pagination(client: AsyncClient, auth_headers: dict, db_ses
             author_name="User One",
             content=f"Event {i}",
             event_type="commit",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
         )
         await NormalizedEventService.upsert_event(db_session, event_data)
     await db_session.commit()

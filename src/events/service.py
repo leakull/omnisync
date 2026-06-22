@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import func, or_, select
@@ -52,7 +52,7 @@ class NormalizedEventService:
         if not events:
             return []
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         insert = _insert_stmt(session)
 
         # Deduplicate input by (source, external_id), keeping the first occurrence.

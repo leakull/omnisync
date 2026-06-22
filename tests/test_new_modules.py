@@ -1,6 +1,6 @@
 import sys
 import types
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -76,7 +76,7 @@ def _event(external_id: str, content: str) -> NormalizedEventCreate:
         author_name="U1",
         content=content,
         event_type="message",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 
@@ -254,7 +254,7 @@ async def test_smtp_reuses_connection_across_sends(monkeypatch):
 # Connector registry (file store + task tracker)
 # ---------------------------------------------------------------------------
 def test_filestore_and_jira_connectors_registered():
-    import src.filestore.service  # noqa: F401
+    import src.filestore.service
     import src.jira.service  # noqa: F401
     from src.integrations.registry import CONNECTORS
 

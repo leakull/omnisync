@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Index, Integer, String, Text
@@ -27,7 +27,7 @@ class FailedEvent(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     replay_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+        DateTime(timezone=True), default=lambda: datetime.now(UTC), nullable=False
     )
     # Background-retry bookkeeping: when the last automatic replay ran and the
     # earliest time the next one is allowed (exponential backoff watermark).

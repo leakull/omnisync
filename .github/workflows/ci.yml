@@ -77,6 +77,29 @@ jobs:
           key: ${{ runner.os }}-pip-${{ hashFiles('requirements/dev.txt') }}
       - run: pip install -r requirements/dev.txt
       - run: python -m pytest tests/ -v --tb=short
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('requirements/dev.txt') }}
+      - run: pip install bandit[toml] pip-audit
+      - name: Static security scan (bandit)
+        run: bandit -c pyproject.toml -r src --severity-level medium
+      - name: Dependency vulnerability audit (pip-audit)
+        run: pip-audit -r requirements/base.txt
 
   migrations:
     runs-on: ubuntu-latest

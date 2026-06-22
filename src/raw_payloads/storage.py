@@ -1,4 +1,5 @@
 import json
+from typing import Any, cast
 
 import aioboto3
 from botocore.config import Config as BotoConfig
@@ -56,7 +57,7 @@ class S3Storage:
         ) as client:
             response = await client.get_object(Bucket=bucket, Key=key)
             body = await response["Body"].read()
-            return json.loads(body)
+            return cast(dict[Any, Any], json.loads(body))
 
 
 s3_storage = S3Storage()

@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 from email.message import EmailMessage
 
 from src.config import settings
@@ -50,10 +51,8 @@ class SMTPConnection:
 
     async def _safe_quit(self) -> None:
         if self._client is not None:
-            try:
+            with contextlib.suppress(Exception):
                 await self._client.quit()
-            except Exception:
-                pass
             self._client = None
 
     async def close(self) -> None:

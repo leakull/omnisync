@@ -14,13 +14,13 @@ from src.webhooks.models import WebhookDelivery
 
 __all__ = [
     "Base",
-    "User",
+    "EventVersion",
+    "FailedEvent",
+    "NormalizedEvent",
+    "OutboxEvent",
     "RawPayload",
     "SyncLog",
     "SyncState",
-    "NormalizedEvent",
-    "EventVersion",
+    "User",
     "WebhookDelivery",
-    "OutboxEvent",
-    "FailedEvent",
 ]

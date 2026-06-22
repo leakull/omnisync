@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -21,7 +21,7 @@ class StubConnector(BaseConnector):
             author_name="Stub User",
             content=raw["text"],
             event_type="message",
-            timestamp=datetime.now(timezone.utc),
+            timestamp=datetime.now(UTC),
             raw_payload_id=raw_payload_id,
         )
 
@@ -73,7 +73,7 @@ def test_base_connector_normalize_none_filtered():
                 author_name="U1",
                 content=raw["text"],
                 event_type="msg",
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             )
 
     connector = FilterConnector()

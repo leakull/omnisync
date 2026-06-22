@@ -8,7 +8,7 @@ Skipped automatically when Docker / testcontainers are unavailable.
 """
 
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -73,7 +73,7 @@ def _event(external_id: str, content: str) -> NormalizedEventCreate:
         author_name="Author One",
         content=content,
         event_type="commit",
-        timestamp=datetime.now(timezone.utc),
+        timestamp=datetime.now(UTC),
     )
 
 

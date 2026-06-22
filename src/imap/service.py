@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
 import email
 import email.message
 import imaplib
 import threading
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from email.header import decode_header
 from typing import Any
 from uuid import UUID
@@ -63,10 +64,8 @@ class IMAPClient:
 
     def _safe_logout(self) -> None:
         if self._conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._conn.logout()
-            except Exception:
-                pass
             self._conn = None
 
     def close(self) -> None:
@@ -151,7 +150,7 @@ class IMAPClient:
             if isinstance(payload, (bytes, bytearray)):
                 body = payload.decode(msg.get_content_charset() or "utf-8", errors="replace")
 
-        date = datetime.now(timezone.utc)
+        date = datetime.now(UTC)
         if date_str:
             try:
                 from email.utils import parsedate_to_datetime

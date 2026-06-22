@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import redis.asyncio as aioredis
 from jose import JWTError, jwt
@@ -37,15 +37,15 @@ async def get_redis() -> aioredis.Redis:
 class AuthService:
     @staticmethod
     def hash_password(password: str) -> str:
-        return pwd_context.hash(password)
+        return str(pwd_context.hash(password))
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        return pwd_context.verify(plain_password, hashed_password)
+        return bool(pwd_context.verify(plain_password, hashed_password))
 
     @staticmethod
     def create_access_token(username: str) -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expire = now + timedelta(minutes=auth_settings.JWT_EXPIRE_MINUTES)
         payload = {
             "sub": username,
@@ -53,11 +53,13 @@ class AuthService:
             "iat": now,
             "token_type": "access",
         }
-        return jwt.encode(payload, auth_settings.JWT_SECRET, algorithm=auth_settings.JWT_ALGORITHM)
+        return str(
+            jwt.encode(payload, auth_settings.JWT_SECRET, algorithm=auth_settings.JWT_ALGORITHM)
+        )
 
     @staticmethod
     def create_refresh_token(username: str) -> str:
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expire = now + timedelta(minutes=auth_settings.JWT_REFRESH_EXPIRE_MINUTES)
         payload = {
             "sub": username,
@@ -65,7 +67,9 @@ class AuthService:
             "iat": now,
             "token_type": "refresh",
         }
-        return jwt.encode(payload, auth_settings.JWT_SECRET, algorithm=auth_settings.JWT_ALGORITHM)
+        return str(
+            jwt.encode(payload, auth_settings.JWT_SECRET, algorithm=auth_settings.JWT_ALGORITHM)
+        )
 
     @staticmethod
     def verify_token(token: str, expected_type: str = "access") -> TokenPayload:
@@ -86,8 +90,8 @@ class AuthService:
             )
         except JWTError as e:
             if "expired" in str(e).lower():
-                raise TokenExpiredError()
-            raise InvalidTokenError()
+                raise TokenExpiredError() from e
+            raise InvalidTokenError() from e
 
     @staticmethod
     async def blacklist_token(token: str) -> None:
@@ -101,7 +105,7 @@ class AuthService:
             )
             exp = payload.get("exp")
             if exp:
-                now = datetime.now(timezone.utc).timestamp()
+                now = datetime.now(UTC).timestamp()
                 ttl = max(int(exp - now), 1)
                 await redis.setex(f"blacklist:{token}", ttl, "1")
         except JWTError:
@@ -110,7 +114,7 @@ class AuthService:
     @staticmethod
     async def is_token_blacklisted(token: str) -> bool:
         redis = await get_redis()
-        return await redis.exists(f"blacklist:{token}") > 0
+        return bool(await redis.exists(f"blacklist:{token}") > 0)
 
     @staticmethod
     async def create_user(session: AsyncSession, data: UserCreate) -> User:

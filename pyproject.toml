@@ -27,12 +27,69 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "N", "W"]
-ignore = ["E501"]
+select = ["E", "F", "I", "N", "W", "B", "UP", "ASYNC", "SIM", "C4", "RUF"]
+ignore = [
+    "E501",    # line length is handled by the formatter
+    "RUF001",  # ambiguous unicode (intentional Cyrillic in docs/strings)
+    "RUF002",  # ambiguous unicode in docstrings (intentional Cyrillic)
+]
+
+[tool.ruff.lint.flake8-bugbear]
+# FastAPI's dependency-injection markers are meant to be called in defaults.
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Header",
+    "fastapi.Cookie",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.File",
+    "fastapi.Security",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests may use module-level mutable defaults on fakes and assert freely.
+"tests/*" = ["RUF012"]
+
+[tool.mypy]
+python_version = "3.12"
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+no_implicit_optional = true
+check_untyped_defs = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+addopts = "--cov=src --cov-report=term-missing --cov-report=xml --cov-fail-under=50"
 markers = [
     "postgres: integration tests that run against a real PostgreSQL instance",
+]
+
+[tool.coverage.run]
+source = ["src"]
+branch = true
+omit = [
+    "src/otel.py",
+    "src/metrics.py",
+    "src/logging_config.py",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "alembic", ".venv"]
+# B101: asserts (used only in tests, already excluded)
+# B104: bind-all-interfaces is intentional for the containerized API server
+skips = ["B104"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "@(abc\\.)?abstractmethod",
 ]

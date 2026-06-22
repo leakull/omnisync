@@ -1,5 +1,6 @@
 import hashlib
 import json
+from datetime import UTC
 from uuid import UUID
 
 from sqlalchemy import select
@@ -42,11 +43,11 @@ async def save_raw_payload(
 
     if payload_size > settings.S3_PAYLOAD_THRESHOLD:
         try:
-            from datetime import datetime, timezone
+            from datetime import datetime
 
             from src.raw_payloads.storage import s3_storage
 
-            key = f"{source}/{correlation_id}/{datetime.now(timezone.utc).isoformat()}.json"
+            key = f"{source}/{correlation_id}/{datetime.now(UTC).isoformat()}.json"
             storage_url = await s3_storage.save_object(key, payload)
             stored_payload = None
             logger.info("payload_stored_in_s3", source=source, size=payload_size, key=key)

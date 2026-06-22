@@ -1,5 +1,5 @@
 def test_celery_tasks_registered():
-    import src.github.tasks  # noqa: F401
+    import src.github.tasks
     import src.telegram.tasks  # noqa: F401
     from src.celery_app import celery_app
 

@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+import contextlib
+from datetime import UTC, datetime
 from uuid import UUID
 
 from src.events.schemas import NormalizedEventCreate
@@ -29,12 +30,10 @@ def parse_message_to_event(
             else (message.from_user.username or str(message.from_user.id))
         )
 
-    timestamp = datetime.now(timezone.utc)
+    timestamp = datetime.now(UTC)
     if message.date:
-        try:
-            timestamp = datetime.fromtimestamp(message.date, tz=timezone.utc)
-        except (ValueError, TypeError):
-            pass
+        with contextlib.suppress(ValueError, TypeError):
+            timestamp = datetime.fromtimestamp(message.date, tz=UTC)
 
     chat_title = ""
     if message.chat and message.chat.title:
