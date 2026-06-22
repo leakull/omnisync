@@ -253,7 +253,9 @@ class IMAPConnector(BaseConnector):
         self.folder = folder
 
     async def fetch(self, since: datetime | None = None) -> list[dict[str, Any]]:
-        loop = asyncio.get_event_loop()
+        # imaplib is blocking; run it in a worker thread so it never stalls the
+        # event loop. get_running_loop() (not get_event_loop) is the 3.12+ API.
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, lambda: self.client.fetch_messages(self.folder, since)
         )

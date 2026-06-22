@@ -277,3 +277,36 @@ def test_imap_external_id_scopes_uid_by_mailbox_and_uidvalidity():
     # Missing UIDVALIDITY degrades gracefully rather than raising.
     no_validity = {**base, "uidvalidity": None}
     assert _build_external_id(no_validity) == "imap-mail.example.com-INBOX-0-3"
+
+
+# ---------------------------------------------------------------------------
+# Production engine / timeout configuration
+# ---------------------------------------------------------------------------
+
+
+def test_engine_kwargs_apply_pool_only_for_postgres(monkeypatch):
+    from src import database
+
+    monkeypatch.setattr(settings, "DATABASE_URL", "postgresql+asyncpg://u:p@localhost:5432/db")
+    pg = database._engine_kwargs()
+    assert pg["pool_pre_ping"] is True
+    assert pg["pool_size"] == settings.DB_POOL_SIZE
+    assert pg["pool_recycle"] == settings.DB_POOL_RECYCLE
+    assert pg["connect_args"]["timeout"] == settings.DB_CONNECT_TIMEOUT
+    assert "statement_timeout" in pg["connect_args"]["server_settings"]
+
+    # SQLite (tests) must not receive queue-pool / asyncpg-only args.
+    monkeypatch.setattr(settings, "DATABASE_URL", "sqlite+aiosqlite:///./x.db")
+    lite = database._engine_kwargs()
+    assert lite["pool_pre_ping"] is True
+    assert "pool_size" not in lite
+    assert "connect_args" not in lite
+
+
+@pytest.mark.asyncio
+async def test_imap_sync_returns_503_when_not_configured(client, auth_headers, monkeypatch):
+    from src.imap import router as imap_router
+
+    monkeypatch.setattr(imap_router.imap_settings, "IMAP_HOST", "")
+    resp = await client.post("/api/v1/imap/sync", headers=auth_headers)
+    assert resp.status_code == 503

@@ -19,7 +19,7 @@ def _get_client() -> Any | None:
     try:
         from qdrant_client import QdrantClient
 
-        return QdrantClient(url=settings.QDRANT_URL)
+        return QdrantClient(url=settings.QDRANT_URL, timeout=settings.QDRANT_TIMEOUT)
     except Exception as e:
         logger.warning("qdrant_connection_failed", error=str(e))
         return None
@@ -81,7 +81,7 @@ def search_events(
     source: str | None = None,
     event_type: str | None = None,
     limit: int = 10,
-) -> list[dict]:
+) -> list[dict[str, Any]]:
     client = _get_client()
     if not client:
         return []

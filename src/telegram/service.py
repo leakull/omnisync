@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 import httpx
@@ -25,12 +26,26 @@ tracer = get_tracer("omnisync.telegram")
 
 
 class TelegramClient:
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = telegram_settings.TELEGRAM_API_BASE
         self.token = telegram_settings.TELEGRAM_BOT_TOKEN
+        self._client: httpx.AsyncClient | None = None
 
     def _get_url(self, method: str) -> str:
         return f"{self.base_url}/bot{self.token}/{method}"
+
+    def _get_client(self) -> httpx.AsyncClient:
+        # Reuse one client (connection pool) across calls; the long-poll read
+        # may exceed the per-request socket timeout, so allow a generous read.
+        if self._client is None or self._client.is_closed:
+            self._client = httpx.AsyncClient(
+                timeout=httpx.Timeout(REQUEST_TIMEOUT, read=LONG_POLL_TIMEOUT + REQUEST_TIMEOUT)
+            )
+        return self._client
+
+    async def aclose(self) -> None:
+        if self._client is not None and not self._client.is_closed:
+            await self._client.aclose()
 
     @retry(
         stop=stop_after_attempt(RETRY_ATTEMPTS),
@@ -38,36 +53,34 @@ class TelegramClient:
     )
     async def get_updates(self, offset: int | None = None) -> list[TelegramUpdate]:
         with tracer.start_as_current_span("telegram.get_updates") as span:
-            params: dict = {"timeout": LONG_POLL_TIMEOUT}
+            params: dict[str, Any] = {"timeout": LONG_POLL_TIMEOUT}
             if offset is not None:
                 params["offset"] = offset
 
-            async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-                response = await client.get(self._get_url("getUpdates"), params=params)
+            response = await self._get_client().get(self._get_url("getUpdates"), params=params)
 
-                if response.status_code != 200:
-                    raise TelegramAPIError(f"HTTP {response.status_code}: {response.text[:200]}")
-
-                data = response.json()
-                if not data.get("ok"):
-                    raise TelegramAPIError(f"API error: {data.get('description', 'Unknown')}")
-
-                updates = []
-                for item in data.get("result", []):
-                    try:
-                        updates.append(TelegramUpdate.model_validate(item))
-                    except Exception as e:
-                        logger.warning("telegram_update_parse_error", error=str(e))
-
-                span.set_attribute("telegram.updates_count", len(updates))
-                return updates
-
-    async def get_me(self) -> dict:
-        async with httpx.AsyncClient(timeout=REQUEST_TIMEOUT) as client:
-            response = await client.get(self._get_url("getMe"))
             if response.status_code != 200:
-                raise TelegramAPIError(f"HTTP {response.status_code}")
-            return response.json()
+                raise TelegramAPIError(f"HTTP {response.status_code}: {response.text[:200]}")
+
+            data = response.json()
+            if not data.get("ok"):
+                raise TelegramAPIError(f"API error: {data.get('description', 'Unknown')}")
+
+            updates: list[TelegramUpdate] = []
+            for item in data.get("result", []):
+                try:
+                    updates.append(TelegramUpdate.model_validate(item))
+                except Exception as e:
+                    logger.warning("telegram_update_parse_error", error=str(e))
+
+            span.set_attribute("telegram.updates_count", len(updates))
+            return updates
+
+    async def get_me(self) -> dict[str, Any]:
+        response = await self._get_client().get(self._get_url("getMe"))
+        if response.status_code != 200:
+            raise TelegramAPIError(f"HTTP {response.status_code}")
+        return response.json()
 
 
 telegram_client = TelegramClient()
@@ -77,7 +90,7 @@ telegram_client = TelegramClient()
 class TelegramConnector(BaseConnector):
     source = "telegram"
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.client = telegram_client
 
     async def fetch(self, since: datetime | None = None) -> list[TelegramUpdate]:

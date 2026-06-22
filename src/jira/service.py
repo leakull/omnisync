@@ -24,7 +24,7 @@ class JiraAPIError(Exception):
 class JiraClient:
     """Reads issues from Jira Cloud REST API v3 with JQL incremental filtering."""
 
-    def __init__(self, base_url: str, email: str, api_token: str, page_size: int = 50):
+    def __init__(self, base_url: str, email: str, api_token: str, page_size: int = 50) -> None:
         self.base_url = base_url.rstrip("/")
         self.auth = (email, api_token)
         self.page_size = page_size
@@ -88,7 +88,7 @@ class JiraConnector(BaseConnector):
         api_token: str = "",
         project: str = "",
         page_size: int = 0,
-    ):
+    ) -> None:
         base_url = base_url or jira_settings.JIRA_BASE_URL
         if not base_url:
             raise ValueError("Jira base URL must be configured (JIRA_BASE_URL)")

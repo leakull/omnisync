@@ -22,6 +22,20 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"
 
+    # Database connection pool / timeouts (asyncpg). Tuned for a long-lived API
+    # process; ignored for SQLite (tests).
+    DB_POOL_SIZE: int = 10
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: int = 30  # max wait (s) to check out a connection from the pool
+    DB_POOL_RECYCLE: int = 1800  # recycle connections older than this (s) to dodge stale TCP
+    DB_CONNECT_TIMEOUT: int = 10  # TCP/handshake timeout (s)
+    DB_STATEMENT_TIMEOUT_MS: int = 30000  # server-side statement timeout (ms); 0 disables
+
+    # Redis client socket timeouts (used by the auth/blacklist client).
+    REDIS_SOCKET_TIMEOUT: int = 5
+    REDIS_SOCKET_CONNECT_TIMEOUT: int = 5
+    REDIS_HEALTH_CHECK_INTERVAL: int = 30
+
     GITHUB_TOKEN: str = ""
     GITHUB_API_BASE: str = "https://api.github.com"
     GITHUB_WEBHOOK_SECRET: str = ""
@@ -44,6 +58,11 @@ class Settings(BaseSettings):
     S3_SECRET_KEY: str = "minioadmin"
     S3_BUCKET: str = "omnisync-raw-payloads"
     S3_PAYLOAD_THRESHOLD: int = 32768
+    # S3/MinIO client timeouts & retries (botocore). Prevents a hung object
+    # store from blocking a worker indefinitely.
+    S3_CONNECT_TIMEOUT: int = 5
+    S3_READ_TIMEOUT: int = 30
+    S3_MAX_ATTEMPTS: int = 3
 
     OTEL_EXPORTER_OTLP_ENDPOINT: str = "http://jaeger:4317"
     JAEGER_HEALTH_URL: str = "http://jaeger:16686/"
@@ -51,6 +70,7 @@ class Settings(BaseSettings):
     RAW_PAYLOAD_TTL_DAYS: int = 90
 
     QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_TIMEOUT: int = 10  # seconds for Qdrant client operations
 
     # Embeddings: backend = local (sentence-transformers) | openai | fake
     EMBEDDING_BACKEND: str = "local"
@@ -59,6 +79,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.openai.com/v1"
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+    OPENAI_TIMEOUT: int = 30  # seconds for OpenAI embedding HTTP calls
+    OPENAI_MAX_RETRIES: int = 3
 
     # Outbox publisher
     OUTBOX_BATCH_SIZE: int = 100

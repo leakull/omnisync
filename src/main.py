@@ -40,9 +40,27 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("otel_init_failed", error=str(e))
     yield
+    # Release pooled HTTP connections held by the long-lived API clients.
+    for closer in (_close_github_client, _close_telegram_client):
+        try:
+            await closer()
+        except Exception as e:
+            logger.warning("client_close_failed", error=str(e))
     shutdown_otel()
     await engine.dispose()
     logger.info("omnisync_shutdown")
+
+
+async def _close_github_client() -> None:
+    from src.github.service import github_client
+
+    await github_client.aclose()
+
+
+async def _close_telegram_client() -> None:
+    from src.telegram.service import telegram_client
+
+    await telegram_client.aclose()
 
 
 app = FastAPI(

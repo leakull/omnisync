@@ -33,3 +33,6 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "postgres: integration tests that run against a real PostgreSQL instance",
+]

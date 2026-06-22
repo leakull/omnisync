@@ -10,6 +10,7 @@ from src.auth.config import auth_settings
 from src.auth.exceptions import InvalidTokenError, TokenExpiredError, UserAlreadyExistsError
 from src.auth.models import User
 from src.auth.schemas import TokenPayload, UserCreate, UserLogin
+from src.config import settings
 from src.logging_config import logger
 
 pwd_context = CryptContext(schemes=["argon2"], deprecated="auto")
@@ -20,7 +21,16 @@ _redis_client: aioredis.Redis | None = None
 async def get_redis() -> aioredis.Redis:
     global _redis_client
     if _redis_client is None:
-        _redis_client = aioredis.from_url(auth_settings.REDIS_URL, decode_responses=True)
+        # Bounded socket timeouts + periodic health checks so a hung Redis can't
+        # block request handling; retry transient timeouts once transparently.
+        _redis_client = aioredis.from_url(
+            auth_settings.REDIS_URL,
+            decode_responses=True,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            retry_on_timeout=True,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+        )
     return _redis_client
 
 

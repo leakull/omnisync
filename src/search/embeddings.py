@@ -17,6 +17,7 @@ import threading
 from functools import lru_cache
 
 import httpx
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from src.config import settings
 from src.logging_config import logger
@@ -59,15 +60,25 @@ def _embed_local(texts: list[str]) -> list[list[float]]:
 def _embed_openai(texts: list[str]) -> list[list[float]]:
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is not configured for the openai embedding backend")
-    resp = httpx.post(
-        f"{settings.OPENAI_BASE_URL}/embeddings",
-        headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
-        json={"model": settings.OPENAI_EMBEDDING_MODEL, "input": texts},
-        timeout=30,
+
+    @retry(
+        stop=stop_after_attempt(settings.OPENAI_MAX_RETRIES),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((httpx.TransportError, httpx.HTTPStatusError)),
+        reraise=True,
     )
-    resp.raise_for_status()
-    data = resp.json()["data"]
-    return [item["embedding"] for item in sorted(data, key=lambda d: d["index"])]
+    def _call() -> list[list[float]]:
+        resp = httpx.post(
+            f"{settings.OPENAI_BASE_URL}/embeddings",
+            headers={"Authorization": f"Bearer {settings.OPENAI_API_KEY}"},
+            json={"model": settings.OPENAI_EMBEDDING_MODEL, "input": texts},
+            timeout=settings.OPENAI_TIMEOUT,
+        )
+        resp.raise_for_status()
+        data = resp.json()["data"]
+        return [item["embedding"] for item in sorted(data, key=lambda d: d["index"])]
+
+    return _call()
 
 
 @lru_cache(maxsize=4096)

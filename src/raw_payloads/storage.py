@@ -1,13 +1,24 @@
 import json
 
 import aioboto3
+from botocore.config import Config as BotoConfig
 
 from src.config import settings
 from src.logging_config import logger
 
 
+def _boto_config() -> BotoConfig:
+    """Bounded timeouts + retries so a slow/unreachable object store fails fast
+    instead of hanging a worker indefinitely."""
+    return BotoConfig(
+        connect_timeout=settings.S3_CONNECT_TIMEOUT,
+        read_timeout=settings.S3_READ_TIMEOUT,
+        retries={"max_attempts": settings.S3_MAX_ATTEMPTS, "mode": "standard"},
+    )
+
+
 class S3Storage:
-    def __init__(self):
+    def __init__(self) -> None:
         self.endpoint_url = settings.S3_ENDPOINT_URL
         self.access_key = settings.S3_ACCESS_KEY
         self.secret_key = settings.S3_SECRET_KEY
@@ -20,6 +31,7 @@ class S3Storage:
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
+            config=_boto_config(),
         ) as client:
             body = json.dumps(data, default=str).encode()
             await client.put_object(
@@ -40,6 +52,7 @@ class S3Storage:
             endpoint_url=self.endpoint_url,
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
+            config=_boto_config(),
         ) as client:
             response = await client.get_object(Bucket=bucket, Key=key)
             body = await response["Body"].read()

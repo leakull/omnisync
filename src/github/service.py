@@ -27,7 +27,7 @@ tracer = get_tracer("omnisync.github")
 
 
 class GitHubClient:
-    def __init__(self):
+    def __init__(self) -> None:
         self.base_url = github_settings.GITHUB_API_BASE
         self.headers = {
             "Accept": "application/vnd.github+json",
@@ -128,7 +128,7 @@ github_client = GitHubClient()
 class GitHubConnector(BaseConnector):
     source = "github"
 
-    def __init__(self, owner: str = "", repo: str = ""):
+    def __init__(self, owner: str = "", repo: str = "") -> None:
         self.owner = owner
         self.repo = repo
         self.client = github_client

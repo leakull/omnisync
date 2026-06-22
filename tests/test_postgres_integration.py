@@ -14,6 +14,10 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+# Marks the whole module so conftest's autouse setup_db leaves the shared
+# Base.metadata with native PG (UUID/JSONB) types instead of SQLite shims.
+pytestmark = pytest.mark.postgres
+
 testcontainers_postgres = pytest.importorskip(
     "testcontainers.postgres", reason="testcontainers not installed"
 )

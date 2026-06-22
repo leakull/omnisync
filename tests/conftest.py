@@ -97,22 +97,40 @@ def event_loop():
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def setup_db():
+async def setup_db(request):
+    # Postgres integration tests run against a real database with native UUID/
+    # JSONB columns — they must NOT get the SQLite-compatible type swap, and the
+    # shared Base.metadata must be left with its real PG types for their ORM
+    # binds to match. Skip the swap (and the SQLite schema) for them entirely.
+    if request.node.get_closest_marker("postgres"):
+        yield
+        return
+
     from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 
+    # Swap PG-specific column types for SQLite-friendly decorators, remembering
+    # the originals so the global metadata can be restored afterwards (otherwise
+    # the mutation leaks into later tests — e.g. the Postgres integration suite).
+    swapped: list[tuple[object, object]] = []
     for table in Base.metadata.tables.values():
         for column in table.columns:
             if isinstance(column.type, PG_UUID):
+                swapped.append((column, column.type))
                 column.type = UUIDTypeDecorator()
             elif isinstance(column.type, JSONB):
+                swapped.append((column, column.type))
                 column.type = JSONTypeDecorator()
 
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    async with test_engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    try:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        yield
+    finally:
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        for column, original in swapped:
+            column.type = original  # type: ignore[attr-defined]
 
 
 @pytest_asyncio.fixture

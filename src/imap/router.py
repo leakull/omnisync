@@ -46,7 +46,7 @@ async def imap_sync(
     current_user: User = Depends(get_current_user),
 ):
     if not imap_settings.IMAP_HOST:
-        return {"status": "error", "detail": "IMAP not configured"}
+        raise HTTPException(status_code=503, detail="IMAP not configured")
 
     correlation_id = set_correlation_id()
     log_id = await create_sync_log(db, correlation_id, "imap_poll")

@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
+from src.config import settings
 from src.events.schemas import NormalizedEventCreate
 from src.filestore.config import filestore_settings
 from src.integrations.base import BaseConnector
@@ -24,7 +25,7 @@ class FileStoreClient:
         secret_key: str,
         bucket: str,
         region: str = "us-east-1",
-    ):
+    ) -> None:
         self.endpoint_url = endpoint_url or None
         self.access_key = access_key
         self.secret_key = secret_key
@@ -35,6 +36,7 @@ class FileStoreClient:
         self, prefix: str = "", since: datetime | None = None
     ) -> list[dict[str, Any]]:
         import aioboto3
+        from botocore.config import Config as BotoConfig
 
         objects: list[dict[str, Any]] = []
         session = aioboto3.Session()
@@ -44,6 +46,11 @@ class FileStoreClient:
             aws_access_key_id=self.access_key,
             aws_secret_access_key=self.secret_key,
             region_name=self.region,
+            config=BotoConfig(
+                connect_timeout=settings.S3_CONNECT_TIMEOUT,
+                read_timeout=settings.S3_READ_TIMEOUT,
+                retries={"max_attempts": settings.S3_MAX_ATTEMPTS, "mode": "standard"},
+            ),
         ) as client:
             paginator = client.get_paginator("list_objects_v2")
             async for page in paginator.paginate(Bucket=self.bucket, Prefix=prefix):
@@ -74,7 +81,7 @@ class FileStoreConnector(BaseConnector):
         bucket: str = "",
         prefix: str = "",
         region: str = "us-east-1",
-    ):
+    ) -> None:
         bucket = bucket or filestore_settings.FILESTORE_BUCKET
         if not bucket:
             raise ValueError("File store bucket must be configured (FILESTORE_BUCKET)")

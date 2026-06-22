@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.auth.dependencies import get_current_user
@@ -18,5 +19,9 @@ async def search(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    results = search_events(query=q, source=source, event_type=event_type, limit=limit)
+    # search_events is synchronous and CPU/IO-blocking (embedding + Qdrant call);
+    # run it off the event loop so it doesn't stall other requests.
+    results = await run_in_threadpool(
+        search_events, query=q, source=source, event_type=event_type, limit=limit
+    )
     return {"query": q, "results": results, "count": len(results)}
