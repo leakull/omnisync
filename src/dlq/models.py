@@ -2,11 +2,10 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Index, Integer, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.database import Base
+from src.db_types import GUID, JSONBType
 
 
 class FailedEvent(Base):
@@ -19,11 +18,11 @@ class FailedEvent(Base):
     __tablename__ = "failed_events"
     __table_args__ = (Index("ix_failed_events_status", "status", "created_at"),)
 
-    id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
+    id: Mapped[UUID] = mapped_column(GUID(), primary_key=True, default=uuid4)
     source: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     operation: Mapped[str] = mapped_column(String(50), nullable=False)
     correlation_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
-    payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    payload: Mapped[dict] = mapped_column(JSONBType, nullable=False)
     error_text: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
     replay_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
