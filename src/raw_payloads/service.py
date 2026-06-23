@@ -37,7 +37,13 @@ async def save_raw_payload(
         logger.info("raw_payload_deduplicated", source=source, content_hash=content_hash)
         return existing_id
 
-    payload_size = len(json.dumps(payload, default=str).encode())
+    # Coerce to a JSON-safe structure (datetime, etc. → str) before it reaches
+    # the JSON/JSONB column. The column serializer has no ``default=`` hook, so a
+    # raw payload carrying datetimes (IMAP ``date``, file-store ``last_modified``)
+    # would otherwise fail to persist. This mirrors the hash computed above.
+    payload = json.loads(json.dumps(payload, default=str))
+
+    payload_size = len(json.dumps(payload).encode())
     storage_url = None
     stored_payload: dict | None = payload
 

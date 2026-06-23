@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class TelegramUser(BaseModel):
@@ -17,7 +17,9 @@ class TelegramChat(BaseModel):
 
 class TelegramMessage(BaseModel):
     message_id: int
-    from_user: TelegramUser | None = None
+    # Telegram sends the sender under the JSON key "from" (a Python keyword), so
+    # it is aliased. populate_by_name lets internal code still pass from_user=...
+    from_user: TelegramUser | None = Field(default=None, alias="from")
     chat: TelegramChat | None = None
     date: int | None = None
     text: str | None = None
